@@ -372,7 +372,7 @@ class ReplicationThread implements Runnable {
 	}
 
 	private static File getTemporaryFile(String fileName) throws IOException {
-		File file = new File(System.getProperty("java.io.tmpdir") + File.pathSeparator + fileName);
+		File file = new File(System.getProperty("java.io.tmpdir") + File.separator + fileName);
 		if (file.exists()) {
 			if (!file.delete()) {
 				return null;
