@@ -1,3 +1,11 @@
+/**
+ * Institute of Formal and Applied Linguistics
+ * Charles University in Prague, Czech Republic
+ * 
+ * http://ufal.mff.cuni.cz
+ * 
+ */
+
 package cz.cuni.mff.ufal.dspace.b2safe;
 
 import java.io.File;
@@ -20,13 +28,12 @@ import org.dspace.content.packager.PackageParameters;
 import org.dspace.core.ConfigurationManager;
 import org.dspace.core.Constants;
 import org.dspace.core.Context;
-import org.dspace.embargo.EmbargoManager;
 import org.dspace.eperson.EPerson;
 import org.dspace.handle.HandleManager;
 import _org.irods.jargon.core.connection.SettableJargonProperties;
-import _org.irods.jargon.core.exception.JargonException;
 
-import cz.cuni.mff.ufal.b2safe.ReplicationService;
+import cz.cuni.mff.ufal.b2safe.ReplicationSerice;
+import cz.cuni.mff.ufal.b2safe.ReplicationServiceIRODSImpl;
 import cz.cuni.mff.ufal.dspace.b2safe.ReplicationManager.MANDATORY_METADATA;
 
 /**
@@ -51,6 +58,8 @@ public class ReplicationManager {
 	static final String NOTIFICATION_EMAIL = ConfigurationManager.getProperty("lr", "lr.replication.eudat.notification_email");
 	static final String WHO = ConfigurationManager.getProperty("dspace.url");
 	
+	static ReplicationSerice replicationService = null;
+	
 	// mandatory from CINES: EUDAT_ROR, OTHER_From, OTHER_AckEmail
 	enum MANDATORY_METADATA {
 		EUDAT_ROR,
@@ -58,15 +67,20 @@ public class ReplicationManager {
 		OTHER_AckEmail
 	}
 
-	public static void initialize() throws JargonException {
+	public static void initialize() throws Exception {
 		Properties config = new Properties();
 		populateConfig(config);
-		ReplicationService.initialize(config);
-		overrideJargonProperties(ReplicationService.getSettableJargonProperties());
+		replicationService = new ReplicationServiceIRODSImpl();
+		replicationService.initialize(config);
+		overrideJargonProperties(((ReplicationServiceIRODSImpl)replicationService).getSettableJargonProperties());
 	}
 
 	public static boolean isInitialized() {
-		return ReplicationService.isInitialized();
+		if(replicationService!=null) {
+			return replicationService.isInitialized();
+		} else {
+			return false;
+		}
 	}
 	
 	public static boolean isReplicationOn() {
@@ -77,12 +91,12 @@ public class ReplicationManager {
 		replicationOn = flag;
 	}
 
-	public static List<String> list() throws JargonException {
-		return new ReplicationService().list();
+	public static List<String> list() throws Exception {
+		return replicationService.list();
 	}
 
-	public static List<String> listMissingReplicas() throws JargonException, SQLException {
-		List<String> alreadyReplicatedItems = new ReplicationService().list();
+	public static List<String> listMissingReplicas() throws Exception {
+		List<String> alreadyReplicatedItems = replicationService.list();
 		List<String> allPublicItems = getPublicItemHandles();
 		List<String> notFound = new ArrayList<String>();
 		for(String publicItem : allPublicItems) {
@@ -93,19 +107,19 @@ public class ReplicationManager {
 		return notFound; 
 	}
 
-	public static boolean delete(String path) throws JargonException  {
-		return new ReplicationService().delete(path);
+	public static boolean delete(String path) throws Exception  {
+		return replicationService.delete(path);
 	}
 
-	public static void download_path(String remoteFileName, String localFileName) throws JargonException {
-		new ReplicationService().retriveFile(remoteFileName, localFileName);
+	public static void download_path(String remoteFileName, String localFileName) throws Exception {
+		replicationService.retriveFile(remoteFileName, localFileName);
 	}
 
-	public static void replicateMissing(Context context) throws UnsupportedOperationException, SQLException, IllegalStateException, JargonException {
+	public static void replicateMissing(Context context) throws Exception {
 		replicateMissing(context, -1);
 	}
 
-	public static void replicateMissing(Context c, int max) throws UnsupportedOperationException, SQLException, IllegalStateException, JargonException {
+	public static void replicateMissing(Context c, int max) throws Exception {
 		for (String handle : listMissingReplicas()) {
 			
 			if (max-- <= 0) return;
@@ -170,6 +184,10 @@ public class ReplicationManager {
 		}
 		return false;
 	}
+	
+	public static ReplicationSerice getReplicationSerice() {
+		return replicationService;
+	}
 
 	public static List<String> getPublicItemHandles() throws SQLException {
 		Context context = new Context();
@@ -205,7 +223,7 @@ public class ReplicationManager {
 
 	public static void replicate(Context context, String handle, Item item, boolean force) throws UnsupportedOperationException, SQLException {
 		// not set up
-		if (!ReplicationService.isInitialized()) {
+		if (!replicationService.isInitialized()) {
 			String msg = String.format("Replication not set up - [%s] will not be processed", handle);
 			log.warn(msg);
 			throw new UnsupportedOperationException(msg);
@@ -224,7 +242,7 @@ public class ReplicationManager {
 			throw new UnsupportedOperationException(msg);
 		}
 
-		Thread runner = new Thread(new Runner(context.getCurrentUser(), handle, item, force));
+		Thread runner = new Thread(new ReplicationThread(context.getCurrentUser(), handle, item, force));
 		runner.setPriority(Thread.MIN_PRIORITY);
 		runner.setDaemon(true);
 		runner.start();
@@ -235,14 +253,14 @@ public class ReplicationManager {
     }
     
     static void populateConfig(Properties config) {
-    	config.put(ReplicationService.CONFIGURATION.HOST.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.host"));
-		config.put(ReplicationService.CONFIGURATION.PORT.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.port"));
-		config.put(ReplicationService.CONFIGURATION.USER_NAME.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.username"));
-		config.put(ReplicationService.CONFIGURATION.PASSWORD.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.password"));
-		config.put(ReplicationService.CONFIGURATION.HOME_DIRECTORY.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.homedirectory"));
-		config.put(ReplicationService.CONFIGURATION.ZONE.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.zone"));
-		config.put(ReplicationService.CONFIGURATION.DEFAULT_STORAGE.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.defaultstorage"));
-		config.put(ReplicationService.CONFIGURATION.REPLICA_DIRECTORY.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.replicadirectory"));
+    	config.put(ReplicationServiceIRODSImpl.CONFIGURATION.HOST.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.host"));
+		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.PORT.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.port"));
+		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.USER_NAME.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.username"));
+		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.PASSWORD.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.password"));
+		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.HOME_DIRECTORY.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.homedirectory"));
+		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.ZONE.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.zone"));
+		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.DEFAULT_STORAGE.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.defaultstorage"));
+		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.REPLICA_DIRECTORY.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.replicadirectory"));
     }
 
     static void overrideJargonProperties(SettableJargonProperties properties) {
@@ -259,14 +277,15 @@ public class ReplicationManager {
     
 } // class
 
-class Runner implements Runnable {
+@SuppressWarnings("deprecation")
+class ReplicationThread implements Runnable {
 	
 	String handle;
 	int itemId;
 	int epersonId;
 	boolean force;
 
-	public Runner(EPerson eperson, String handle, Item item, boolean force) {
+	public ReplicationThread(EPerson eperson, String handle, Item item, boolean force) {
 		this.handle = handle;
 		this.itemId = item.getID();
 		this.epersonId = eperson.getID();
@@ -338,7 +357,7 @@ class Runner implements Runnable {
 			metadata.put(MANDATORY_METADATA.EUDAT_ROR.name(), itemUrl);
 			metadata.put(MANDATORY_METADATA.OTHER_From.name(), ReplicationManager.WHO);
 			metadata.put(MANDATORY_METADATA.OTHER_AckEmail.name(), ReplicationManager.NOTIFICATION_EMAIL);
-			new ReplicationService().replicate(file.getAbsolutePath(), metadata, force);
+			ReplicationManager.getReplicationSerice().replicate(file.getAbsolutePath(), metadata, force);
 		} catch (Exception e) {
 			ReplicationManager.log.error(String.format("Could not replicate [%s] [%s]", this.handle, e.toString()), e);
 		}

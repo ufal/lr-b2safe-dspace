@@ -1,3 +1,11 @@
+/**
+ * Institute of Formal and Applied Linguistics
+ * Charles University in Prague, Czech Republic
+ * 
+ * http://ufal.mff.cuni.cz
+ * 
+ */
+
 package cz.cuni.mff.ufal.dspace.b2safe;
 
 import java.util.ArrayList;
@@ -21,6 +29,7 @@ import org.dspace.event.Event;
  * Community|Collection|Item+Create|Modify
  * 
  * and the eudatreplication must be added to event.dispatcher.default.consumers
+ * 
  */
 public class ItemModifyConsumer implements Consumer {
 
