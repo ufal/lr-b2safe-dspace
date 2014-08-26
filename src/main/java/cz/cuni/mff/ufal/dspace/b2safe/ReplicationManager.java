@@ -30,6 +30,8 @@ import org.dspace.core.Constants;
 import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
 import org.dspace.handle.HandleManager;
+
+import _org.irods.jargon.core.connection.IRODSServerProperties;
 import _org.irods.jargon.core.connection.SettableJargonProperties;
 
 import cz.cuni.mff.ufal.b2safe.ReplicationSerice;
@@ -66,15 +68,21 @@ public class ReplicationManager {
 		OTHER_From,
 		OTHER_AckEmail
 	}
+	
+	static Properties config = null;
 
 	public static void initialize() throws Exception {
-		Properties config = new Properties();
+		config = new Properties();
 		populateConfig(config);
 		replicationService = new ReplicationServiceIRODSImpl();
 		replicationService.initialize(config);
 		overrideJargonProperties(((ReplicationServiceIRODSImpl)replicationService).getSettableJargonProperties());
 	}
-
+	
+	public static Properties getConfiguration(){
+		return config;
+	}
+	
 	public static boolean isInitialized() {
 		if(replicationService!=null) {
 			return replicationService.isInitialized();
@@ -111,7 +119,7 @@ public class ReplicationManager {
 		return replicationService.delete(path);
 	}
 
-	public static void download_path(String remoteFileName, String localFileName) throws Exception {
+	public static void retriveFile(String remoteFileName, String localFileName) throws Exception {
 		replicationService.retriveFile(remoteFileName, localFileName);
 	}
 
@@ -263,7 +271,7 @@ public class ReplicationManager {
 		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.REPLICA_DIRECTORY.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.replicadirectory"));
     }
 
-    static void overrideJargonProperties(SettableJargonProperties properties) {
+    public static void overrideJargonProperties(SettableJargonProperties properties) {
         String maxThreads = ConfigurationManager.getProperty("lr", "lr.replication.jargon.numThreads");
         
         if(maxThreads!=null) {
@@ -273,6 +281,19 @@ public class ReplicationManager {
         	}
         }
         
+    }
+    
+    public static Map<String, String> getServerInformation() {
+    	Map<String, String> info = new HashMap<String, String>();
+    	IRODSServerProperties serverProperties = ((ReplicationServiceIRODSImpl)replicationService).gerIRODSServerProperties();
+    	info.put("JARGON_VERSION", IRODSServerProperties.getJargonVersion());    	
+    	info.put("API_VERSION", serverProperties.getApiVersion());
+    	info.put("REL_VERSION", serverProperties.getRelVersion());
+    	info.put("RODS_ZONE", serverProperties.getRodsZone());
+    	info.put("INITIALIZE_DATE", serverProperties.getInitializeDate().toString());
+    	info.put("SERVER_BOOT_TIME", "" + serverProperties.getServerBootTime());
+    	info.put("ICAT_ENABLED", serverProperties.getIcatEnabled().toString());    	
+    	return info;
     }
     
 } // class
