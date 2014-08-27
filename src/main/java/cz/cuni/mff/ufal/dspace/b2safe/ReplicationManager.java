@@ -33,7 +33,6 @@ import org.dspace.handle.HandleManager;
 
 import _org.irods.jargon.core.connection.IRODSServerProperties;
 import _org.irods.jargon.core.connection.SettableJargonProperties;
-
 import cz.cuni.mff.ufal.b2safe.ReplicationSerice;
 import cz.cuni.mff.ufal.b2safe.ReplicationServiceIRODSImpl;
 import cz.cuni.mff.ufal.dspace.b2safe.ReplicationManager.MANDATORY_METADATA;
@@ -63,7 +62,7 @@ public class ReplicationManager {
 	static ReplicationSerice replicationService = null;
 	
 	// mandatory from CINES: EUDAT_ROR, OTHER_From, OTHER_AckEmail
-	enum MANDATORY_METADATA {
+	public enum MANDATORY_METADATA {
 		EUDAT_ROR,
 		OTHER_From,
 		OTHER_AckEmail
@@ -103,6 +102,14 @@ public class ReplicationManager {
 		return replicationService.list();
 	}
 
+	public static List<String> list(boolean returnAbsPath) throws Exception {
+		return replicationService.list(returnAbsPath);
+	}
+
+	public static List<String> list(String remoteDirectory, boolean returnAbsPath) throws Exception {
+		return replicationService.list(remoteDirectory, returnAbsPath);
+	}
+
 	public static List<String> listMissingReplicas() throws Exception {
 		List<String> alreadyReplicatedItems = replicationService.list();
 		List<String> allPublicItems = getPublicItemHandles();
@@ -114,7 +121,17 @@ public class ReplicationManager {
 		}		
 		return notFound; 
 	}
+	
+	public static List<String> search(Map<String, String> metadata) throws Exception {
+		return replicationService.search(metadata);
+	}
 
+	public static Map<String, String> getMetadataOfDataObject(
+			String dataObjectAbsolutePath) throws Exception {
+		return replicationService.getMetadataOfDataObject(dataObjectAbsolutePath);
+	}
+
+	
 	public static boolean delete(String path) throws Exception  {
 		return replicationService.delete(path);
 	}
