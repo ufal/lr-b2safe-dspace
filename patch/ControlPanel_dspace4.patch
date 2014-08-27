@@ -1,0 +1,124 @@
+diff --git a/dspace-xmlui/src/main/java/org/dspace/app/xmlui/aspect/administrative/ControlPanel.java b/dspace-xmlui/src/main/java/org/dspace/app/xmlui/aspect/administrative/ControlPanel.java
+index 434dc39..e3f750d 100644
+--- a/dspace-xmlui/src/main/java/org/dspace/app/xmlui/aspect/administrative/ControlPanel.java
++++ b/dspace-xmlui/src/main/java/org/dspace/app/xmlui/aspect/administrative/ControlPanel.java
+@@ -48,6 +48,9 @@ import org.dspace.core.ConfigurationManager;
+ import org.dspace.eperson.EPerson;
+ import org.xml.sax.SAXException;
+ 
++import cz.cuni.mff.ufal.dspace.app.xmlui.aspect.administrative.ControlPanelReplicationTabHelper;
++import cz.cuni.mff.ufal.dspace.b2safe.ReplicationManager;
++
+ /**
+  * This page displays important (and some not-so important) systems 
+  * type information about your running dspace.
+@@ -185,7 +188,7 @@ public class ControlPanel extends AbstractDSpaceTransformer implements Serviceab
+     /**
+      * The five states that this page can be in.
+      */
+-    private enum OPTIONS {java, dspace, alerts, activity, harvest};
++    private enum OPTIONS {java, dspace, alerts, activity, harvest, replication};
+ 
+     /**
+      * From the <code>org.apache.avalon.framework.service.Serviceable</code> API, 
+@@ -255,6 +258,11 @@ public class ControlPanel extends AbstractDSpaceTransformer implements Serviceab
+         {
+             option = OPTIONS.harvest;
+         }
++        if (request.getParameter("replication") != null)
++        {
++            option = OPTIONS.replication;
++        }
++        
+ 
+         Division div = body.addInteractiveDivision("control-panel", contextPath+"/admin/panel", Division.METHOD_POST, "primary administrative");
+         div.setHead(T_head);
+@@ -313,7 +321,17 @@ public class ControlPanel extends AbstractDSpaceTransformer implements Serviceab
+             options.addItemXref(userSortTarget, "Current Activity");
+         }
+ 
++        if (option == OPTIONS.replication)
++        {
++            options.addItem().addHighlight("bold").addXref("?replication", "Replication");
++        }
++        else
++        {
++            options.addItemXref("?replication", "Replication");
++        }
+ 
++        
++        
+         // The main content:
+         if (option == OPTIONS.java)
+         {
+@@ -335,6 +353,10 @@ public class ControlPanel extends AbstractDSpaceTransformer implements Serviceab
+         {
+             addHarvest(div);
+         }
++        else if (option == OPTIONS.replication)
++        {
++        	addReplication(div);
++        }
+         else
+         {
+             div.addPara(T_select_panel);
+@@ -1004,6 +1026,54 @@ public class ControlPanel extends AbstractDSpaceTransformer implements Serviceab
+             }
+         }
+     }
++    
++    private void addReplication(Division mainDiv) throws WingException, SQLException {
++
++    	mainDiv.addHidden("replication").setValue("true");
++    	
++    	Request request = ObjectModelHelper.getRequest(objectModel);
++		
++		Division div = mainDiv.addDivision("irods_div");
++
++		// if not initialized try initializing it
++		if (!ReplicationManager.isInitialized()) {
++			try {
++				ReplicationManager.initialize();
++			} catch (Exception e) {
++				List info = div.addList("replication-config");
++				info.addItem().addContent(e.getLocalizedMessage());
++				return;
++			}
++		}		
++		
++		String commandOutput = ControlPanelReplicationTabHelper.executeCommand(request, context);
++		
++		ControlPanelReplicationTabHelper.showConfiguration(div);
++		
++		if (!ReplicationManager.isReplicationOn()) {
++			return;
++		}
++
++		ControlPanelReplicationTabHelper.addForm(div);
++
++		if (ControlPanelReplicationTabHelper.shouldListReplicas(request)) {
++			div = mainDiv.addDivision("result_div", "itemlist");
++			try {
++				commandOutput = ControlPanelReplicationTabHelper.listReplicas(div, request, context);
++			} catch (Exception e) {
++				commandOutput = e.getLocalizedMessage();
++			}
++		}
++		
++		if (commandOutput != null) {			
++			div = mainDiv.addDivision("result_div", "itemlist");
++			div.setHead("Result");
++			div.addDivision("result", "alert alert-info")
++					.addPara("programs-output", "programs-result linkify")
++					.addContent(commandOutput);
++		}
++    	
++    }
+ 	
+     
+     /**
+@@ -1027,3 +1097,4 @@ public class ControlPanel extends AbstractDSpaceTransformer implements Serviceab
+         super.dispose();
+     }
+ }
++
