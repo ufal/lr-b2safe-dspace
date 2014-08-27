@@ -60,3 +60,23 @@ event.dispatcher.default.consumers = search, browse, discovery, eperson, harvest
 event.consumer.replication.class = cz.cuni.mff.ufal.dspace.b2safe.ItemModifyConsumer
 event.consumer.replication.filters = Community|Collection|Item+Create|Modify 
 ```
+
+### Control Panel
+
+To activate the Replication tab in Control Panel, apply the patch according to dspace version in patch folder.
+`git apply ControlPanel_dspace4.patch`
+
+
+### What is replicateable
+
+Each submission is automatically replicated after it has been approved, provided that the item is PUB (dc.rights.label). The submission is converted to AIP format that is uploaded to the iRods server. We use our PID in the name of each AIP e.g., 
+```
+irods://XXX@irods.server:XX/IRODSZone/home/dspace_1.8.2/11858_00-097C-0000-0001-487A-4-6451959456007568280.zip
+irods://XXX@irods.server:XX/IRODSZone/home/dspace_1.8.2/11858_00-097C-0000-0001-487E-B-6544474914476974525.zip
+```
+After uploading the file, we fill out its metadata e.g.,
+```
+EUDAT_ROR : http://hdl.handle.net/11858/00-097Z-0000-0022-E46B-E
+OTHER_AckEmail : email@ufal.mff.cuni.cz
+OTHER_From : https://ufal-point-dev.ms.mff.cuni.cz/jm/xmlui
+```
