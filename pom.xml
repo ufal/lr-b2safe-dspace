@@ -42,14 +42,21 @@
 			<groupId>cz.cuni.mff.ufal</groupId>
 			<artifactId>b2safe</artifactId>
 			<version>1.0</version>
+			<scope>system</scope>
+			<systemPath>${project.basedir}/lib/b2safe-1.0.jar</systemPath>			
 		</dependency>
          <dependency>
             <groupId>org.dspace</groupId>
             <artifactId>dspace-api</artifactId>
             <version>${project.version}</version>
          </dependency>
-
-
+		<dependency>
+			<groupId>org.irods</groupId>
+			<artifactId>jargon</artifactId>
+			<version>4.0.2-UFAL</version>
+			<scope>system</scope>
+			<systemPath>${project.basedir}/lib/jargon-core-4.0.2-UFAL.jar</systemPath>
+		</dependency>
 	</dependencies>
 
 </project>
