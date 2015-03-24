@@ -1,22 +1,19 @@
 # Business to Safe DSpace Module
 
-This DSpace module can be used to automatically replicate each submission after it has been approved. The submission is converted to AIP format which is uploaded to the iRods server. We use our PID in the name of each AIP e.g.
-
-> irods://XXX@replication.server:XX/Home/dspace/11858_00-097C-0000-0001-487A-4.zip
-> irods://XXX@replication.server:XX/Home/dspace/11858_00-097C-0000-0001-487E-B.zip
+This DSpace module can be used to automatically replicate each submission after it has been approved. The submission is converted to AIP format which is uploaded to b2safe server.
 
 
 ### Requirements
-To use this package you need to first install lr-b2safe-core package
+To use this package you need to first install B2SAFE-repository-package package
 ```
-git clone https://github.com/ufal/lr-b2safe-core.git
-cd lr-b2safe-core
+git clone git@github.com:EUDAT-B2SAFE/B2SAFE-repository-package.git
+cd B2SAFE-repository-package
 mvn install -Dmaven.test.skip=true
 ```
 
 ### Configuration
 
-To add the module to your DSpace. Clone this git repository into the sources folder of DSpace, and update the following files.
+In order to add this module to your DSpace, clone this git repository into the sources folder of DSpace, and update the following files.
 
 * Change the parent version in lr-b2safe-dspace/pom.xml to match your DSpace version.
 * Add the module in the root pom.xml of DSpace.
@@ -41,16 +38,17 @@ To add the module to your DSpace. Clone this git repository into the sources fol
 ```
 * Add a new configuration module "lr" in dspace/config/modules with following properties.
 ```
-lr.replication.eudat.on=
-lr.replication.eudat.host=
-lr.replication.eudat.port=
-lr.replication.eudat.username=
-lr.replication.eudat.password=
-lr.replication.eudat.homedirectory=
-lr.replication.eudat.replicadirectory=
-lr.replication.eudat.zone=
-lr.replication.eudat.defaultstorage=
-lr.replication.eudat.notification_email=
+lr.replication.on=true
+lr.replication.protocol=irods
+lr.replication.host=
+lr.replication.port=
+lr.replication.username=
+lr.replication.password=
+lr.replication.id=
+# must end with a /
+lr.replication.homedirectory=
+lr.replication.zone=
+lr.replication.defaultstorage=
 ```
 * Finally add the event listener to dspace.cfg, e.g. named replication
 ```
@@ -64,19 +62,14 @@ event.consumer.replication.filters = Community|Collection|Item+Create|Modify
 ### Control Panel
 
 To activate the Replication tab in Control Panel, apply the patch according to dspace version in patch folder.
-`git apply ControlPanel_dspace4.patch`
+`git apply -3 ControlPanel_dspace5.patch`
 
 
-### What is replicateable
+### What is replicable
 
-Each submission is automatically replicated after it has been approved, provided that the item is PUB (dc.rights.label). The submission is converted to AIP format that is uploaded to the iRods server. We use our PID in the name of each AIP e.g., 
+Each submission is automatically replicated after it has been approved, provided that the item is PUB (dc.rights.label).
+The submission is converted to AIP format that is uploaded to the b2safe server. We use our PID in the name of each AIP e.g.,
 ```
 irods://XXX@irods.server:XX/IRODSZone/home/dspace_1.8.2/11858_00-097C-0000-0001-487A-4-6451959456007568280.zip
 irods://XXX@irods.server:XX/IRODSZone/home/dspace_1.8.2/11858_00-097C-0000-0001-487E-B-6544474914476974525.zip
-```
-After uploading the file, we fill out its metadata e.g.,
-```
-EUDAT_ROR : http://hdl.handle.net/11858/00-097Z-0000-0022-E46B-E
-OTHER_AckEmail : email@ufal.mff.cuni.cz
-OTHER_From : https://ufal-point-dev.ms.mff.cuni.cz/jm/xmlui
 ```

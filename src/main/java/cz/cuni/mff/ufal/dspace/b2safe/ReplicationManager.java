@@ -11,15 +11,13 @@ package cz.cuni.mff.ufal.dspace.b2safe;
 import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
+import fr.cines.eudat.repopack.b2safe_rp_core.AVUMetaData;
+import fr.cines.eudat.repopack.b2safe_rp_core.DataObject;
 import org.apache.log4j.Logger;
 import org.dspace.authorize.AuthorizeManager;
-import org.dspace.content.DCValue;
+import org.dspace.content.Metadatum;
 import org.dspace.content.DSpaceObject;
 import org.dspace.content.Item;
 import org.dspace.content.ItemIterator;
@@ -31,11 +29,8 @@ import org.dspace.core.Context;
 import org.dspace.eperson.EPerson;
 import org.dspace.handle.HandleManager;
 
-import _org.irods.jargon.core.connection.IRODSServerProperties;
-import _org.irods.jargon.core.connection.SettableJargonProperties;
-import cz.cuni.mff.ufal.b2safe.ReplicationService;
-import cz.cuni.mff.ufal.b2safe.ReplicationServiceIRODSImpl;
-import cz.cuni.mff.ufal.dspace.b2safe.ReplicationManager.MANDATORY_METADATA;
+import fr.cines.eudat.repopack.b2safe_rp_core.DataSet;
+import fr.cines.eudat.repopack.b2safe_rp_core.DataSet.B2SAFE_CONFIGURATION;
 
 /**
  * This class is responsible for managing replication. It should be called
@@ -54,12 +49,13 @@ public class ReplicationManager {
 	
 	static final Logger log = Logger.getLogger(ReplicationManager.class);
 
-	static boolean replicationOn = ConfigurationManager.getBooleanProperty("lr", "lr.replication.eudat.on", false);
+	static boolean replicationOn = ConfigurationManager.getBooleanProperty(
+        "lr", "lr.replication.on", false);
 	
-	static final String NOTIFICATION_EMAIL = ConfigurationManager.getProperty("lr", "lr.replication.eudat.notification_email");
-	static final String WHO = ConfigurationManager.getProperty("dspace.url");
-	
-	static ReplicationService replicationService = null;
+	static final String WHO = ConfigurationManager.getProperty(
+        "dspace.url");
+
+	static DataSet replicationService = null;
 	
 	// mandatory from CINES: EUDAT_ROR, OTHER_From, OTHER_AckEmail
 	public enum MANDATORY_METADATA {
@@ -71,13 +67,24 @@ public class ReplicationManager {
 	static Properties config = null;
 
 	public static boolean initialize() throws Exception {
-		boolean res = false;
 		config = new Properties();
 		populateConfig(config);
-		replicationService = new ReplicationServiceIRODSImpl();
-		res = replicationService.initialize(config);
-		overrideJargonProperties(((ReplicationServiceIRODSImpl)replicationService).getSettableJargonProperties());
-		return res;
+
+        // jargon specific
+        String maxThreads = ConfigurationManager.getProperty(
+            "lr", "lr.replication.jargon.numThreads");
+        // must be set or b2_core crashes
+        if ( null == maxThreads ) {
+            maxThreads = "1";
+        } 
+        
+        if ( null != maxThreads ) {
+            config.put(B2SAFE_CONFIGURATION.IRODS_TRANSFER_MAX_THREADS.name(), maxThreads );
+        }
+
+        replicationService = new DataSet(config);
+        boolean res = replicationService.initB2safeConnection();
+        return res;
 	}
 	
 	public static Properties getConfiguration(){
@@ -100,46 +107,69 @@ public class ReplicationManager {
 		replicationOn = flag;
 	}
 
-	public static List<String> list() throws Exception {
-		return replicationService.list();
-	}
-
-	public static List<String> list(boolean returnAbsPath) throws Exception {
-		return replicationService.list(returnAbsPath);
-	}
-
-	public static List<String> list(String remoteDirectory, boolean returnAbsPath) throws Exception {
-		return replicationService.list(remoteDirectory, returnAbsPath);
+	public static List<DataObject> list() throws Exception {
+        List<DataObject> dos = replicationService.listDOFromDirectory( "", false );
+        return dos;
 	}
 
 	public static List<String> listMissingReplicas() throws Exception {
-		List<String> alreadyReplicatedItems = replicationService.list();
+		List<DataObject> alreadyReplicatedItems = list();
 		List<String> allPublicItems = getPublicItemHandles();
 		List<String> notFound = new ArrayList<String>();
-		for(String publicItem : allPublicItems) {
-			if(!alreadyReplicatedItems.contains(handleToFileName(publicItem))) {
-				notFound.add(publicItem);
-			}
+		for ( String publicItem : allPublicItems ) {
+            boolean already_replicated = false;
+            for ( DataObject one_do : alreadyReplicatedItems ) {
+                String name = one_do.getFileName();
+                if ( null == name ) {
+                    name = one_do.getRemoteDirPath();
+                }
+		    	if ( null != name && name.contains(handleToFileName(publicItem))) {
+			    	already_replicated = true;
+                    break;
+    			}
+            }
+            if ( !already_replicated ) {
+                notFound.add(publicItem);
+            }
 		}		
 		return notFound; 
 	}
-	
-	public static List<String> search(Map<String, String> metadata) throws Exception {
-		return replicationService.search(metadata);
-	}
 
 	public static Map<String, String> getMetadataOfDataObject(
-			String dataObjectAbsolutePath) throws Exception {
-		return replicationService.getMetadataOfDataObject(dataObjectAbsolutePath);
+			String dataObjectePath) throws Exception
+    {
+        DataObject one_do = new DataObject();
+        one_do.setFileName(dataObjectePath);
+        one_do = replicationService.getMetadataFromOneDOByPath(one_do);
+        return getMetadataMap(one_do);
+	}
+
+	public static Map<String, String> getMetadataMap(
+            DataObject one_do) throws Exception
+    {
+        Map<String, AVUMetaData> m = one_do.getEudatMetadata();
+        Map<String, String> ret = new HashMap<String, String>();
+    	for ( Map.Entry<String, AVUMetaData> entry : m.entrySet() ) {
+            ret.put( entry.getKey(), entry.getValue().getValue() );
+        }
+        return ret;
 	}
 
 	
 	public static boolean delete(String path) throws Exception  {
-		return replicationService.delete(path);
+        DataObject one_do = new DataObject();
+        one_do.setFileName( path );
+        one_do.setRemoteDirPath( "" );
+        one_do.setRemoteDirPathIsAbsolute( true );
+        one_do = replicationService.deleteDO(one_do);
+        return one_do.getOperationIsSuccess();
 	}
 
-	public static void retriveFile(String remoteFileName, String localFileName) throws Exception {
-		replicationService.retriveFile(remoteFileName, localFileName);
+	public static void retrieveFile(String remoteFileName, String localFileName) throws Exception {
+        DataObject one_do = new DataObject();
+        one_do.setLocalFilePath( localFileName );
+        one_do.setFileName( remoteFileName );
+		replicationService.retrieveOneDOByPath(one_do);
 	}
 
 	public static void replicateMissing(Context context) throws Exception {
@@ -148,9 +178,9 @@ public class ReplicationManager {
 
 	public static void replicateMissing(Context c, int max) throws Exception {
 		for (String handle : listMissingReplicas()) {
-			
-			if (max-- <= 0) return;
-			
+			if (max-- <= 0) {
+                return;
+            }
 			DSpaceObject dso = HandleManager.resolveToObject(c, handle);
 			replicate(c, handle, (Item) dso);
 		}
@@ -161,7 +191,6 @@ public class ReplicationManager {
 	public static boolean isReplicatable(Item item) {
 		
 		Context context = null;
-		
 		try {
 			
 			context = new Context();
@@ -174,8 +203,8 @@ public class ReplicationManager {
 			// embargoes
 			String embargoLiftField = ConfigurationManager.getProperty("embargo.field.lift");
 			if(embargoLiftField!=null && !embargoLiftField.isEmpty()) {
-				DCValue[] mdEmbargo = item.getMetadata(embargoLiftField);
-				if(mdEmbargo!=null && mdEmbargo.length>0) {
+                Metadatum[] mdEmbargo = item.getMetadataByMetadataString(embargoLiftField);
+				if ( null != mdEmbargo && 0 < mdEmbargo.length ) {
 					return false;
 				}				
 			}
@@ -193,7 +222,8 @@ public class ReplicationManager {
 		} finally {
 			try {
 				context.complete();
-			}catch(Exception e){ }
+			}catch(Exception e){
+            }
 		}
 
 		// passed all tests
@@ -201,9 +231,9 @@ public class ReplicationManager {
 	}
 
 	private static boolean isPublic(Item i) {
-		DCValue[] pub_dc = i.getDC("rights", "label", Item.ANY);
+        Metadatum[] pub_dc = i.getMetadata("dc", "rights", "label", Item.ANY);
 		if (pub_dc.length > 0) {
-			for (DCValue dc : pub_dc) {
+			for (Metadatum dc : pub_dc) {
 				if (dc.value.equals("PUB")) {
 					return true;
 				}
@@ -212,7 +242,7 @@ public class ReplicationManager {
 		return false;
 	}
 	
-	public static ReplicationService getReplicationSerice() {
+	public static DataSet getReplicationService() {
 		return replicationService;
 	}
 
@@ -280,38 +310,28 @@ public class ReplicationManager {
     }
     
     static void populateConfig(Properties config) {
-    	config.put(ReplicationServiceIRODSImpl.CONFIGURATION.HOST.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.host"));
-		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.PORT.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.port"));
-		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.USER_NAME.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.username"));
-		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.PASSWORD.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.password"));
-		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.HOME_DIRECTORY.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.homedirectory"));
-		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.ZONE.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.zone"));
-		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.DEFAULT_STORAGE.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.defaultstorage"));
-		config.put(ReplicationServiceIRODSImpl.CONFIGURATION.REPLICA_DIRECTORY.name(), ConfigurationManager.getProperty("lr", "lr.replication.eudat.replicadirectory"));
+        config.put(B2SAFE_CONFIGURATION.B2SAFE_TRANS_PROTOCOL.name(),
+            ConfigurationManager.getProperty("lr", "lr.replication.protocol"));
+    	config.put(B2SAFE_CONFIGURATION.HOST.name(),
+            ConfigurationManager.getProperty("lr", "lr.replication.host"));
+		config.put(B2SAFE_CONFIGURATION.PORT.name(),
+            ConfigurationManager.getProperty("lr", "lr.replication.port"));
+		config.put(B2SAFE_CONFIGURATION.USER_NAME.name(),
+            ConfigurationManager.getProperty("lr", "lr.replication.username"));
+		config.put(B2SAFE_CONFIGURATION.PASSWORD.name(),
+            ConfigurationManager.getProperty("lr", "lr.replication.password"));
+		config.put(B2SAFE_CONFIGURATION.HOME_DIRECTORY.name(),
+            ConfigurationManager.getProperty("lr", "lr.replication.homedirectory"));
+		config.put(B2SAFE_CONFIGURATION.ZONE.name(),
+            ConfigurationManager.getProperty("lr", "lr.replication.zone"));
+		config.put(B2SAFE_CONFIGURATION.DEFAULT_STORAGE.name(),
+            ConfigurationManager.getProperty("lr", "lr.replication.defaultstorage"));
+		config.put(B2SAFE_CONFIGURATION.RESOURCE_ID.name(),
+            ConfigurationManager.getProperty("lr", "lr.replication.id"));
     }
 
-    public static void overrideJargonProperties(SettableJargonProperties properties) {
-        String maxThreads = ConfigurationManager.getProperty("lr", "lr.replication.jargon.numThreads");
-        
-        if(maxThreads!=null) {
-        	try{
-        		properties.setMaxParallelThreads(Integer.parseInt(maxThreads));
-        	}catch(Exception ex) {        		
-        	}
-        }
-        
-    }
-    
     public static Map<String, String> getServerInformation() {
-    	Map<String, String> info = new HashMap<String, String>();
-    	IRODSServerProperties serverProperties = ((ReplicationServiceIRODSImpl)replicationService).gerIRODSServerProperties();
-    	info.put("JARGON_VERSION", IRODSServerProperties.getJargonVersion());    	
-    	info.put("API_VERSION", serverProperties.getApiVersion());
-    	info.put("REL_VERSION", serverProperties.getRelVersion());
-    	info.put("RODS_ZONE", serverProperties.getRodsZone());
-    	info.put("INITIALIZE_DATE", serverProperties.getInitializeDate().toString());
-    	info.put("SERVER_BOOT_TIME", "" + serverProperties.getServerBootTime());
-    	info.put("ICAT_ENABLED", serverProperties.getIcatEnabled().toString());    	
+    	Map<String, String> info = replicationService.getServerInformation();
     	return info;
     }
     
@@ -388,18 +408,22 @@ class ReplicationThread implements Runnable {
 			}
 
 			// replicate
-			DCValue[] mdURI = item.getMetadata("dc.identifier.uri");
+            Metadatum[] mdURI = item.getMetadataByMetadataString("dc.identifier.uri");
 			if(mdURI==null || mdURI.length<=0) {
 				throw new RuntimeException("dc.identifier.uri is missing for item " + item.getHandle());
 			}
 			String itemUrl = mdURI[0].value;
-			Map<String, String> metadata = new HashMap<String, String>();
-			metadata.put(MANDATORY_METADATA.EUDAT_ROR.name(), itemUrl);
-			metadata.put(MANDATORY_METADATA.OTHER_From.name(), ReplicationManager.WHO);
-			metadata.put(MANDATORY_METADATA.OTHER_AckEmail.name(), ReplicationManager.NOTIFICATION_EMAIL);
-			ReplicationManager.getReplicationSerice().replicate(file.getAbsolutePath(), metadata, force);
+            DataObject one_do = new DataObject();
+            one_do.setRor(itemUrl);
+            one_do.setLocalFilePath( file.getAbsolutePath() );
+            one_do.setFileName( file.getName() );
+            one_do.setRemoteDirPath( "" );
+            one_do.setRemoteDirPathIsAbsolute( false );
+
+			ReplicationManager.getReplicationService().replicateOneDO( one_do );
 		} catch (Exception e) {
-			ReplicationManager.log.error(String.format("Could not replicate [%s] [%s]", this.handle, e.toString()), e);
+			ReplicationManager.log.error(
+                String.format("Could not replicate [%s] [%s]", this.handle, e.toString()), e);
 		}
 
 		try {
