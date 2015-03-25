@@ -13,7 +13,12 @@ mvn install -Dmaven.test.skip=true
 
 ### Configuration
 
-In order to add this module to your DSpace, clone this git repository into the sources folder of DSpace, and update the following files.
+In order to add this module to your DSpace, clone this git repository into the sources folder of DSpace.
+```
+git clone git@github.com:ufal/lr-b2safe-dspace.git
+```
+
+Afterwards update the following files.
 
 * Change the parent version in lr-b2safe-dspace/pom.xml to match your DSpace version.
 * Add the module in the root pom.xml of DSpace.
@@ -28,7 +33,7 @@ In order to add this module to your DSpace, clone this git repository into the s
   </modules>
 </profile>
 ```
-* Add the dependency in root pom.xml, dspace/pom.xml and dspace-xmlui/dspace-xmlui-api/pom.xml (1.8.x) or dspace-xmlui/pom.xml (4.x)
+* Add the dependency in root pom.xml, dspace/pom.xml and dspace-xmlui/dspace-xmlui-api/pom.xml (1.8.x) or dspace-xmlui/pom.xml (4.x+)
 ```
 <dependency>
   <groupId>cz.cuni.mff.ufal.dspace</groupId>
@@ -36,7 +41,22 @@ In order to add this module to your DSpace, clone this git repository into the s
   <version>${project.version}</version>
 </dependency>
 ```
-* Add a new configuration module "lr" in dspace/config/modules with following properties.
+* Add module lr-b2safe-dspace to dspace-xmlui profile in pom.xml similar to
+```
+    <profile>
+        <id>dspace-xmlui</id>
+        <activation>
+            <file>
+                <exists>dspace-xmlui/pom.xml</exists>
+            </file>
+        </activation>
+        <modules>
+            <module>dspace-xmlui</module>
+            <module>lr-b2safe-dspace</module>
+        </modules>
+    </profile>
+```
+* Add a new configuration module "lr.cfg" in dspace/config/modules with following properties.
 ```
 lr.replication.on=true
 lr.replication.protocol=irods
@@ -62,7 +82,9 @@ event.consumer.replication.filters = Community|Collection|Item+Create|Modify
 ### Control Panel
 
 To activate the Replication tab in Control Panel, apply the patch according to dspace version in patch folder.
-`git apply -3 ControlPanel_dspace5.patch`
+`git apply -3 ./lr-b2safe-dspace/patch/ControlPanel_dspace5.patch`
+
+Note: in case you see index error while applying the patch, try running `git update-index -q --refresh`.
 
 
 ### What is replicable
