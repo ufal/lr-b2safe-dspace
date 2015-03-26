@@ -59,15 +59,15 @@ index 0000000..66714ca
 +			try {
 +				serverInfo = ReplicationManager.getServerInformation();
 +			} catch(Exception e) {
-+				serverInfo = new HashMap<String, String>();
-+			}
 +
++			}
++           if ( null != serverInfo ) {
 +			for ( Map.Entry<String, String> entry : serverInfo.entrySet() ) {
 +			    row_tmp = table.addRow(Row.ROLE_DATA);
 +			    row_tmp.addCellContent(entry.getKey());
 +			    row_tmp.addCellContent(entry.getValue());
 +           }
-+
++           }
 +			Properties config = ReplicationManager.getConfiguration();
 +	
 +            java.util.Enumeration e = config.propertyNames();
