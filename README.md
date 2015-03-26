@@ -33,7 +33,7 @@ Afterwards update the following files.
   </modules>
 </profile>
 ```
-* Add the dependency in root pom.xml, dspace/pom.xml and dspace-xmlui/dspace-xmlui-api/pom.xml (1.8.x) or dspace-xmlui/pom.xml (4.x+)
+* Add the dependency to pom.xml in the root directory and dspace-xmlui/dspace-xmlui-api/pom.xml (1.8.x) or dspace-xmlui/pom.xml (4.x+)
 ```
 <dependency>
   <groupId>cz.cuni.mff.ufal.dspace</groupId>
